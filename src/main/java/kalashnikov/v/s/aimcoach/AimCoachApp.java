@@ -1,177 +1,255 @@
 package kalashnikov.v.s.aimcoach;
 
+import javafx.animation.AnimationTimer;
 import javafx.application.Application;
-import javafx.application.Platform;
+import javafx.geometry.Pos;
 import javafx.scene.Scene;
 import javafx.scene.canvas.Canvas;
 import javafx.scene.canvas.GraphicsContext;
 import javafx.scene.control.*;
+import javafx.scene.input.KeyCode;
+import javafx.scene.input.MouseEvent;
 import javafx.scene.layout.BorderPane;
 import javafx.scene.layout.VBox;
-import javafx.scene.paint.Color;
 import javafx.stage.Stage;
-
-
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Random;
 
 public class AimCoachApp extends Application {
 
-    public static final int TARGET_RADIUS = 25;
+    public static final int LENGTH = 600;
+    public static final int WIDTH = 800;
+
+    public static final int TARGET_RADIUS_EASY = 25;
+    public static final int TARGET_RADIUS_MEDIUM = 20;
+    public static final int TARGET_RADIUS_HARD = 15;
+    private int targetRadius = TARGET_RADIUS_EASY;
+
     public static final int TARGET_COUNT = 3;
     private int score = 0;
     private int record = 0;
     private List<Target> targets = new ArrayList<>();
-    private Timer timer;
-    private int secondsLeft = 60;
+    private AnimationTimer timer;
+    private long lastTime;
+    private long targetTime = 10 * 1_000_000_000L; // 10 секунд в наносекундах
 
     private Label scoreLabel;
     private Label recordLabel;
     private Label timeLabel;
 
+    private Stage primaryStage;
+    private Scene menuScene;
+    private Scene gameScene;
+    private boolean isGamePaused = false;
+
     @Override
     public void start(Stage primaryStage) {
-        primaryStage.setTitle("AimCoach App");
+        this.primaryStage = primaryStage;
+        this.primaryStage.setTitle("AimCoach App");
 
-        BorderPane root = new BorderPane();
-        Scene scene = new Scene(root, 1280, 960); // Установка размеров окна
+        // Создаем сцену меню
+        menuScene = createMenuScene();
 
-        // Создание меню
-        MenuBar menuBar = new MenuBar();
-        Menu fileMenu = new Menu("File");
-        MenuItem newGameMenuItem = new MenuItem("New Game");
-        MenuItem settingsMenuItem = new MenuItem("Settings");
-        MenuItem exitMenuItem = new MenuItem("Exit");
-        fileMenu.getItems().addAll(newGameMenuItem, settingsMenuItem, new SeparatorMenuItem(), exitMenuItem);
-        menuBar.getMenus().add(fileMenu);
+        // Устанавливаем сцену меню в качестве сцены по умолчанию
+        this.primaryStage.setScene(menuScene);
+        this.primaryStage.show();
 
-        // Обработка событий меню
-        newGameMenuItem.setOnAction(event -> startNewGame());
-        exitMenuItem.setOnAction(event -> primaryStage.close());
-
-        root.setTop(menuBar);
-
-        Canvas canvas = new Canvas(1280, 960); // Создание Canvas
-        root.setCenter(canvas); // Добавление Canvas на главное окно
-
-        primaryStage.setScene(scene);
-        primaryStage.show();
-
-        VBox infoBox = new VBox();
-        scoreLabel = new Label("Score: " + score);
-        recordLabel = new Label("Record: " + record);
-        timeLabel = new Label("Time left: " + secondsLeft + "s");
-        infoBox.getChildren().addAll(scoreLabel, recordLabel, timeLabel);
-        root.setTop(infoBox);
-
-        // Создание мишеней
-        for (int i = 0; i < TARGET_COUNT; i++) {
-            createTarget();
-        }
-
-        // Запуск таймера
-        timer = new Timer();
-        timer.scheduleAtFixedRate(new TimerTask() {
-            @Override
-            public void run() {
-                secondsLeft--;
-                if (secondsLeft <= 0) {
-                    timer.cancel();
+        // Обработка нажатия на клавишу ESC для вызова и закрытия меню
+        this.primaryStage.addEventHandler(javafx.scene.input.KeyEvent.KEY_RELEASED, (key) -> {
+            if (key.getCode() == KeyCode.ESCAPE) {
+                if (this.primaryStage.getScene() == gameScene) {
+                    this.primaryStage.setScene(menuScene);
+                    isGamePaused = true;
+                    if (timer != null) timer.stop(); // Пауза таймера
                 }
-                updateInfoLabels();
             }
-        }, 1000, 1000);
+        });
 
-        // Рисование мишеней
-        drawTargets(canvas.getGraphicsContext2D());
+        // Создаем сцену игры и присваиваем ее gameScene
+        gameScene = createGameScene();
+    }
 
-        // Обработка кликов мыши
-        canvas.setOnMouseClicked(event -> {
-            int mouseX = (int) event.getX();
-            int mouseY = (int) event.getY();
-            for (int i = 0; i < targets.size(); i++) {
-                Target target = targets.get(i);
-                if (target.isHit(mouseX, mouseY)) {
-                    score++;
-                    scoreLabel.setText("Score: " + score); // Обновление счета
-                    targets.remove(target); // Удаление попавшей мишени
-                    createTarget(); // Создание новой мишени
-                    drawTargets(canvas.getGraphicsContext2D()); // Перерисовка мишеней
+    private Scene createMenuScene() {
+        // Создаем кнопку для входа в игру
+        Button startGameButton = new Button("Start Game");
+        startGameButton.setOnAction(event -> {
+            // Заменяем сцену на сцену игры
+            primaryStage.setScene(gameScene);
+            isGamePaused = false;
+            resetScore();
+            generateTargets();
+            lastTime = System.nanoTime();
+            startTimer();
+        });
+
+        // Создаем кнопку для выхода из приложения
+        Button exitButton = new Button("Exit");
+        exitButton.setOnAction(event -> {
+            // Закрываем приложение
+            primaryStage.close();
+        });
+
+        // Создаем метку для отображения текущей сложности
+        Label difficultyLabel = new Label("Difficulty: Easy");
+
+        // Создаем кнопку для изменения сложности игры
+        Button changeDifficultyButton = new Button("Change Difficulty");
+        changeDifficultyButton.setOnAction(event -> {
+            // Изменяем сложность игры и обновляем метку
+            if (targetRadius == TARGET_RADIUS_EASY) {
+                targetRadius = TARGET_RADIUS_MEDIUM;
+                difficultyLabel.setText("Difficulty: Medium");
+            } else if (targetRadius == TARGET_RADIUS_MEDIUM) {
+                targetRadius = TARGET_RADIUS_HARD;
+                difficultyLabel.setText("Difficulty: Hard");
+            } else if (targetRadius == TARGET_RADIUS_HARD) {
+                targetRadius = TARGET_RADIUS_EASY;
+                difficultyLabel.setText("Difficulty: Easy");
+            }
+            generateTargets();
+        });
+
+        // Создаем метку для отображения текущего счета
+        scoreLabel = new Label();
+        scoreLabel.setText("Score: " + score);
+
+        // Создаем метку для отображения наилучшего результата
+        recordLabel = new Label("Record: " + record);
+
+        // Создаем вертикальную панель для расположения элементов меню
+        VBox menuLayout = new VBox(20);
+        menuLayout.setAlignment(Pos.CENTER);
+        menuLayout.getChildren().addAll(startGameButton, changeDifficultyButton, exitButton, difficultyLabel, scoreLabel, recordLabel);
+
+        // Создаем главную панель
+        BorderPane menuPane = new BorderPane();
+        menuPane.setCenter(menuLayout);
+
+        // Создаем сцену меню
+        Scene menuScene = new Scene(menuPane, WIDTH, LENGTH);
+
+        return menuScene;
+    }
+
+
+    private Scene createGameScene() {
+        // Создаем полотно для рисования
+        Canvas gameCanvas = new Canvas(WIDTH, LENGTH);
+
+        // Получаем графический контекст
+        GraphicsContext gc = gameCanvas.getGraphicsContext2D();
+
+        // Создаем метку для отображения оставшегося времени
+        timeLabel = new Label("Time Left: " + (targetTime / 1_000_000_000)); // Переводим наносекунды в секунды
+
+        // Создаем вертикальную панель для расположения элементов игры
+        VBox gameLayout = new VBox(20);
+        gameLayout.setAlignment(Pos.TOP_CENTER);
+
+        gameLayout.getChildren().addAll(timeLabel, gameCanvas);
+
+        // Создаем главную панель
+        BorderPane gamePane = new BorderPane();
+        gamePane.setCenter(gameLayout);
+
+        // Создаем сцену игры
+        Scene gameScene = new Scene(gamePane, WIDTH, LENGTH);
+
+
+        // Обработка нажатия на полотно игры
+        gameCanvas.addEventHandler(MouseEvent.MOUSE_CLICKED, event -> {
+            Iterator<Target> iterator = targets.iterator();
+            while (iterator.hasNext()) {
+                Target target = iterator.next();
+                if (target.contains(event.getX(), event.getY()) && !target.isPopped()) {
+                    score++; // Увеличиваем счет
+                    scoreLabel.setText("Score: " + score); // Обновляем метку счета
+                    target.pop(); // Помечаем текущий шарик как "взорванный"
+
+                    // Создаем новый шарик и добавляем его в список целей
+                    double x = new Random().nextDouble() * (WIDTH - targetRadius * 2) + targetRadius;
+                    double y = new Random().nextDouble() * (LENGTH - targetRadius * 2) + targetRadius;
+                    targets.add(new Target(x, y, targetRadius));
+
+                    // Перерисовываем цели на полотне
+                    drawTargets(gc);
+
+                    // Прерываем цикл, чтобы обработать клик только на одном шарике за раз
                     break;
                 }
             }
         });
 
-        primaryStage.setScene(scene);
-        primaryStage.show();
+        targets.clear();
+        generateTargets();
+        // Рисуем шарики на полотне
+        drawTargets(gc);
+
+        return gameScene;
     }
 
     private void drawTargets(GraphicsContext gc) {
-        gc.clearRect(0, 0, 1280, 960); // Очистка холста перед перерисовкой
-        gc.setFill(Color.RED); // Установка цвета мишени
+        gc.clearRect(0, 0, WIDTH, LENGTH); // Очищаем полотно
         for (Target target : targets) {
-            gc.fillOval(target.getX(), target.getY(), TARGET_RADIUS * 2, TARGET_RADIUS * 2);
+            target.draw(gc); // Рисуем цели
         }
     }
 
-    private void createTarget() {
-        Random random = new Random();
-        int x = random.nextInt(1280 - TARGET_RADIUS * 2);
-        int y = random.nextInt(960 - TARGET_RADIUS * 2);
-        targets.add(new Target(x, y));
-    }
 
-    public void startNewGame() {
-        score = 0;
-        secondsLeft = 60;
-        timer.cancel();
-        timer = new Timer();
-        timer.scheduleAtFixedRate(new TimerTask() {
+    private void startTimer() {
+        timer = new AnimationTimer() {
             @Override
-            public void run() {
-                secondsLeft--;
-                if (secondsLeft <= 0) {
-                    timer.cancel();
+            public void handle(long now) {
+                long currentTime = System.nanoTime();
+                long elapsedTime = currentTime - lastTime;
+                lastTime = currentTime;
+
+                targetTime -= elapsedTime;
+
+                if (targetTime <= 0) {
+                    timer.stop();
+                    if (score > record) {
+                        record = score;
+                        recordLabel.setText("Record: " + record);
+                    }
+                    isGamePaused = true;
+                    primaryStage.setScene(menuScene);
                 }
-                timeLabel.setText("Time left: " + secondsLeft + "s"); // Обновление времени
+
+                long secondsLeft = targetTime / 1_000_000_000; // Переводим наносекунды в секунды
+                timeLabel.setText("Time Left: " + secondsLeft);
             }
-        }, 1000, 1000);
-        targets.clear(); // Очистка мишеней
-        for (int i = 0; i < TARGET_COUNT; i++) {
-            createTarget();
-        }
-        scoreLabel.setText("Score: " + score); // Обновление счета
+        };
+        timer.start();
     }
 
-    private void updateInfoLabels() {
-        Platform.runLater(() -> {
-            timeLabel.setText("Time left: " + secondsLeft + "s");
-        }); // Обновление времени
+    private void resetScore() {
+        score = 0;
+        scoreLabel.setText("Score: " + score);
+    }
+
+    private void generateTargets() {
+        //targets.clear();
+        Random random = new Random();
+        int remainingTargets = TARGET_COUNT - targets.size();
+        for (int i = 0; i < remainingTargets; i++) {
+            double x = random.nextDouble() * (WIDTH - targetRadius * 2) + targetRadius;
+            double y = random.nextDouble() * (LENGTH - targetRadius * 2) + targetRadius;
+            targets.add(new Target(x, y, targetRadius));
+        }
+
+    }
+
+    private Target generateTarget() {
+        Random random = new Random();
+        double x = random.nextDouble() * (WIDTH - targetRadius * 2) + targetRadius;
+        double y = random.nextDouble() * (LENGTH - targetRadius * 2) + targetRadius;
+        return new Target(x, y, targetRadius);
     }
 
     public static void main(String[] args) {
         launch(args);
     }
 }
-
-class Target {
-    private int x;
-    private int y;
-
-    public Target(int x, int y) {
-        this.x = x;
-        this.y = y;
-    }
-
-    public boolean isHit(int mouseX, int mouseY) {
-        return Math.pow(mouseX - x - AimCoachApp.TARGET_RADIUS, 2) + Math.pow(mouseY - y - AimCoachApp.TARGET_RADIUS, 2) < Math.pow(AimCoachApp.TARGET_RADIUS, 2);
-    }
-
-    public int getX() {
-        return x;
-    }
-
-    public int getY() {
-        return y;
-    }
-}
-
