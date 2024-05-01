@@ -1,7 +1,6 @@
 module com.example.aimcoach {
     requires javafx.controls;
     requires javafx.fxml;
-    requires jlayer;
     requires java.desktop;
 
 
