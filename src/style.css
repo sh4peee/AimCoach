@@ -1,0 +1,29 @@
+.button {
+    -fx-background-color: linear-gradient(#ff5400, #be1d00);
+    -fx-text-fill: white;
+    -fx-font-weight: bold;
+    -fx-padding: 10px 20px;
+    -fx-border-radius: 15px;
+    -fx-background-radius: 15px;
+    -fx-effect: dropshadow(three-pass-box, rgba(0,0,0,0.8), 10, 0, 0, 0);
+    transition: all 0.3s ease-in-out;
+}
+
+.button:hover {
+    -fx-background-color: linear-gradient(#be1d00, #ff5400);
+    -fx-padding: 15px 25px;
+    -fx-cursor: hand;
+}
+
+.label {
+    -fx-font-size: 16px;
+    -fx-text-fill: #ffd700; /* золотой цвет */
+    -fx-font-weight: bold;
+    -fx-effect: dropshadow(gaussian, rgba(0,0,0,0.75), 5, 0, 0, 1);
+}
+
+#scoreLabel, #recordLabel, #timeLabel {
+    -fx-font-size: 18px;
+    -fx-text-fill: #555;
+    -fx-font-weight: bold;
+}

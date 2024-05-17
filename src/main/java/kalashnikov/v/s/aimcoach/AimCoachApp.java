@@ -14,10 +14,10 @@ import javafx.scene.input.MouseEvent;
 import javafx.scene.layout.*;
 import javafx.stage.Stage;
 import java.util.ArrayList;
-import java.util.Iterator;
 import java.util.List;
 import java.util.Random;
 import javafx.scene.paint.Color;
+
 public class AimCoachApp extends Application {
     public static final int LENGTH = 776;
     public static final int WIDTH = 1380;
@@ -28,7 +28,7 @@ public class AimCoachApp extends Application {
     public static final int TARGET_COUNT = 3;
     private int score = 0;
     private int record = 0;
-    private List<Target> targets = new ArrayList<>();
+    private final List<Target> targets = new ArrayList<>();
     private AnimationTimer timer;
     private long lastTime;
     private long targetTime = 20 * 1_000_000_000L; // 20 секунд в наносекундах
@@ -40,10 +40,17 @@ public class AimCoachApp extends Application {
     private Scene gameScene;
     private ComboBox<String> soundComboBox;
     private ComboBox<String> backgroundComboBox;
-    private boolean isGamePaused = false;
-    private int currentBackgroundIndex = 0; // Индекс текущего фона
     private int successfulHits = 0;
     private int missedHits = 0;
+
+    private long[] reactionTimes;
+    private int attemptIndex;
+    private Label[] attemptLabels;
+    private Label resultLabel;
+    private Scene reactionTestScene;
+    private final Random random = new Random();
+    private StackPane targetPane;
+    private AnimationTimer reactionTimer;
 
     @Override
     public void start(Stage primaryStage) {
@@ -59,10 +66,9 @@ public class AimCoachApp extends Application {
 
         // Обработка нажатия на клавишу ESC для вызова и закрытия меню
         this.primaryStage.addEventHandler(javafx.scene.input.KeyEvent.KEY_RELEASED, (key) -> {
-            if (key.getCode() == KeyCode.ESCAPE) {
-                if (this.primaryStage.getScene() == gameScene) {
+            if (key.getCode() == KeyCode.ESCAPE ) {
+                if (this.primaryStage.getScene() == gameScene || this.primaryStage.getScene() == reactionTestScene) {
                     this.primaryStage.setScene(menuScene);
-                    isGamePaused = true;
                     if (timer != null) timer.stop(); // Пауза таймера
                 }
             }
@@ -70,6 +76,9 @@ public class AimCoachApp extends Application {
 
         // Создаем сцену игры и присваиваем ее gameScene
         gameScene = createGameScene();
+
+        // Создание сцены теста реакции
+        reactionTestScene = createReactionTestScene();
     }
     private Scene createMenuScene() {
         // Выпадающий список для выбора звука попадания
@@ -88,7 +97,11 @@ public class AimCoachApp extends Application {
             String selectedBackground = backgroundComboBox.getValue();
             updateBackground(selectedBackground);
         });
+        // Создаем метку для отображения над комбобоксом выбора карты
+        Label backgroundLabel = new Label("Карта:");
 
+        // Создаем метку для отображения над комбобоксом выбора звука выстрела
+        Label soundLabel = new Label("Звук выстрела:");
 
         // Создаем выпадающий список для выбора времени игры
         ComboBox<String> timeComboBox = new ComboBox<>();
@@ -116,13 +129,15 @@ public class AimCoachApp extends Application {
         startGameButton.setOnAction(event -> {
             // Заменяем сцену на сцену игры
             primaryStage.setScene(gameScene);
-            isGamePaused = false;
             resetScore();
             generateTargets();
             lastTime = System.nanoTime();
             startTimer();
 
         });
+
+        Button reactionTestButton = new Button("Reaction Test");
+        reactionTestButton.setOnAction(event -> primaryStage.setScene(reactionTestScene));
 
         Button restartButton = new Button("Restart");
         restartButton.setOnAction(event -> {
@@ -136,10 +151,8 @@ public class AimCoachApp extends Application {
             primaryStage.close();
         });
 
-        // Создаем метку для отображения текущей сложности
         Label difficultyLabel = new Label("Difficulty: Easy");
 
-        // Создаем кнопку для изменения сложности игры
         Button changeDifficultyButton = new Button("Change Difficulty");
         changeDifficultyButton.setOnAction(event -> {
             // Изменяем сложность игры и обновляем метку
@@ -166,9 +179,9 @@ public class AimCoachApp extends Application {
         VBox menuLayout = new VBox(20);
         menuLayout.setAlignment(Pos.CENTER);
         menuLayout.getChildren().addAll(timeComboBox);
-        menuLayout.getChildren().addAll(backgroundComboBox);
-        menuLayout.getChildren().addAll(startGameButton,restartButton, changeDifficultyButton, exitButton, difficultyLabel, scoreLabel, recordLabel);
-        menuLayout.getChildren().add(soundComboBox);
+        menuLayout.getChildren().addAll(backgroundLabel, backgroundComboBox);
+        menuLayout.getChildren().addAll(startGameButton,restartButton, reactionTestButton, changeDifficultyButton, exitButton, difficultyLabel, scoreLabel, recordLabel);
+        menuLayout.getChildren().addAll(soundLabel, soundComboBox);
 
         // Установка фона
         Image backgroundImage = new Image("file:src/images/menu_bg.jpg");
@@ -179,7 +192,6 @@ public class AimCoachApp extends Application {
         menuPane.setBackground(new Background(background));
         menuPane.setCenter(menuLayout);
         menuPane.setTop(timeComboBox);
-
 
         // Создаем сцену меню
         Scene menuScene = new Scene(menuPane, WIDTH, LENGTH);
@@ -205,7 +217,6 @@ public class AimCoachApp extends Application {
         targetTime = 20 * 1_000_000_000L;
         startTimer();
         primaryStage.setScene(gameScene);
-        isGamePaused = false;
 
     }
 
@@ -218,38 +229,31 @@ public class AimCoachApp extends Application {
         }
     }
     private void updateBackground(String backgroundName) {
-        String imagePath = ""; // Путь к изображению
-        switch (backgroundName) {
-            case "Фон 1":
-                imagePath = "file:src/images/bg_1.jpg";
-                break;
-            case "Фон 2":
-                imagePath = "file:src/images/bg_2.jpg";
-                break;
-        }
+        String imagePath = switch (backgroundName) {
+            case "Dust" -> "file:src/images/bg_1.jpg";
+            case "Inferno" -> "file:src/images/bg_2.jpg";
+            default -> ""; // Путь к изображению
+        };
         setGameBackground(((BorderPane)gameScene.getRoot()), imagePath);
     }
 
     private Scene createGameScene() {
-        // Инициализация и настройка accuracyLabel
         accuracyLabel = new Label("Accuracy: 0.00%");
-        accuracyLabel.setTextFill(Color.GOLD); // Цвет текста для метки
+        accuracyLabel.setTextFill(Color.GOLD);
 
         // Создаем полотно для рисования
         Canvas gameCanvas = new Canvas(WIDTH, LENGTH);
         // Получаем графический контекст
         GraphicsContext gc = gameCanvas.getGraphicsContext2D();
         // Создаем метку для отображения оставшегося времени
-        timeLabel = new Label("Time Left: " + (targetTime / 1_000_000_000)); // Переводим наносекунды всекунды
+        timeLabel = new Label("Time Left: " + (targetTime / 1_000_000_000));
         timeLabel.setTextFill(Color.GOLD);
         // Создаем вертикальную панель для расположения элементов игры
         VBox gameLayout = new VBox(20);
         gameLayout.setAlignment(Pos.TOP_CENTER);
         gameLayout.getChildren().addAll(timeLabel, gameCanvas);
-        // Создаем главную панель
         BorderPane gamePane = new BorderPane();
         gamePane.setCenter(gameLayout);
-        // Панель для информации вверху
         HBox topPanel = new HBox();
         topPanel.setAlignment(Pos.CENTER_RIGHT);
         topPanel.setPadding(new Insets(10, 20, 10, 20));
@@ -265,28 +269,18 @@ public class AimCoachApp extends Application {
         // Обработка нажатия на полотно игры
         gameCanvas.addEventHandler(MouseEvent.MOUSE_CLICKED, event -> {
             boolean hit = false;
-            Iterator<Target> iterator = targets.iterator();
-            while (iterator.hasNext()) {
-                Target target = iterator.next();
+            for (Target target : targets) {
                 if (target.contains(event.getX(), event.getY()) && !target.isPopped()) {
                     successfulHits++;
                     hit = true;
-                    score++; // Увеличиваем счет
-                    scoreLabel.setText("Score: " + score); // Обновляем метку счета
-                    target.pop(); // Помечаем текущий шарик как "взорванный"
+                    score++;
+                    scoreLabel.setText("Score: " + score);
+                    target.pop();
 
-                    // Получаем выбранный звук из ComboBox
                     String selectedSound = soundComboBox.getValue();
-                    // Создаем путь к файлу звука попадания
                     String soundPath = "src/Sounds/" + selectedSound;
-                    // запускает звук с заданной громкостью( от 0 до 1)_
+                    // запускает звук с заданной громкостью( от 0 до 1)
                     SoundPlayer.playSound(soundPath).setVolume((float) 0.4);
-                    // запускает звук и остановит все остальные потоки
-                    //SoundPlayer.playSound("src/Sounds/ak47.wav").join();
-                    // запускает звук не останавливая потоки и смешивая звуки
-                    //SoundPlayer.playSound("sounds/hello.wav");
-
-                    // Создаем новый шарик и добавляем его в список целей
                     double x = new Random().nextDouble() * (WIDTH - targetRadius * 2) + targetRadius;
                     double y = new Random().nextDouble() * (LENGTH - targetRadius * 2) + targetRadius;
                     targets.add(new Target(x, y, targetRadius));
@@ -301,22 +295,21 @@ public class AimCoachApp extends Application {
             if (!hit) {
                 missedHits++;
             }
-            updateAccuracyLabel();  // Обновляем метку точности
+            updateAccuracyLabel();
         });
         targets.clear();
         generateTargets();
-        // Рисуем шарики на полотне
+
         drawTargets(gc);
         return gameScene;
     }
 
     private void drawTargets(GraphicsContext gc) {
-        gc.clearRect(0, 0, WIDTH, LENGTH); // Очищаем полотно
+        gc.clearRect(0, 0, WIDTH, LENGTH);
         for (Target target : targets) {
-            target.draw(gc); // Рисуем цели
+            target.draw(gc);
         }
     }
-
     private void startTimer() {
         timer = new AnimationTimer() {
             @Override
@@ -333,7 +326,6 @@ public class AimCoachApp extends Application {
                         record = score;
                         recordLabel.setText("Record: " + record);
                     }
-                    isGamePaused = true;
                     primaryStage.setScene(menuScene);
                 }
 
@@ -355,6 +347,113 @@ public class AimCoachApp extends Application {
             double y = random.nextDouble() * (LENGTH - targetRadius * 2) + targetRadius;
             targets.add(new Target(x, y, targetRadius));
         }
+    }
+    private Scene createReactionTestScene() {
+        VBox reactionLayout = new VBox(20);
+        reactionLayout.setAlignment(Pos.CENTER);
+        reactionLayout.setPadding(new Insets(20));
+
+        Label reactionTestLabel = new Label("Reaction Test");
+        reactionTestLabel.setStyle("-fx-font-size: 24px;");
+
+        Button startReactionTestButton = new Button("Start Reaction Test");
+
+        resultLabel = new Label();
+
+        attemptLabels = new Label[5];
+        for (int i = 0; i < attemptLabels.length; i++) {
+            attemptLabels[i] = new Label("Attempt " + (i + 1) + ": -- ms");
+        }
+
+        targetPane = new StackPane();
+        targetPane.setPrefSize(WIDTH, LENGTH);
+        targetPane.setStyle("-fx-background-color: green;");
+        targetPane.setOnMousePressed(this::handleReactionClick);
+
+        startReactionTestButton.setOnAction(event -> startReactionTest());
+
+        reactionLayout.getChildren().addAll(reactionTestLabel, startReactionTestButton, resultLabel);
+        reactionLayout.getChildren().addAll(attemptLabels);
+        reactionLayout.getChildren().add(targetPane);
+
+        BackgroundFill backgroundFill = new BackgroundFill(Color.BLACK, CornerRadii.EMPTY, Insets.EMPTY);
+        Background background = new Background(backgroundFill);
+        reactionLayout.setBackground(background);
+
+        Scene scene = new Scene(reactionLayout, WIDTH, LENGTH);
+        scene.setOnKeyPressed(event -> {
+            if (event.getCode().toString().equals("ESCAPE")) {
+                event.consume();
+            }
+        });
+
+        scene.getStylesheets().add("file:src/style.css");
+        return scene;
+    }
+
+    private void startReactionTest() {
+        reactionTimes = new long[5];
+        attemptIndex = 0;
+        resultLabel.setText("");
+        for (int i = 0; i < attemptLabels.length; i++) {
+            attemptLabels[i].setText("Attempt " + (i + 1) + ": -- ms");
+        }
+        displayNextTarget();
+    }
+
+    private void displayNextTarget() {
+        if (attemptIndex >= 5) {
+            long totalReactionTime = 0;
+            for (long reactionTime : reactionTimes) {
+                totalReactionTime += reactionTime;
+            }
+            long averageReactionTime = totalReactionTime / 5;
+            resultLabel.setText("Average Reaction Time: " + averageReactionTime + " ms");
+            return;
+        }
+
+        long delay = random.nextInt(3000) + 1000;
+        reactionTimer = new AnimationTimer() {
+            private long startTime = -1;
+            private boolean targetVisible = false;
+
+            @Override
+            public void handle(long now) {
+                if (startTime == -1) {
+                    startTime = now;
+                } else if (now - startTime >= delay * 1_000_000 && !targetVisible) {
+                    showTarget();
+                    targetVisible = true;
+                    reactionTimer.stop();
+                }
+            }
+        };
+        reactionTimer.start();
+    }
+
+    private void showTarget() {
+        Label targetLabel = new Label("Click!");
+        targetLabel.setAlignment(Pos.CENTER);
+        targetLabel.setPrefSize(1380, 355);
+        targetLabel.setStyle("-fx-background-color: red; -fx-font-size: 36px; -fx-padding: 20px;");
+        targetPane.getChildren().add(targetLabel);
+        targetPane.setUserData(System.nanoTime()); // Save the time when target is shown
+    }
+
+    private void handleReactionClick(MouseEvent event) {
+        if (targetPane.getChildren().isEmpty()) {
+            return;
+        }
+
+        long startTime = (long) targetPane.getUserData();
+        long reactionTime = (System.nanoTime() - startTime) / 1_000_000; // Convert to milliseconds
+        reactionTimes[attemptIndex] = reactionTime;
+        attemptLabels[attemptIndex].setText("Attempt " + (attemptIndex + 1) + ": " + reactionTime + " ms");
+        attemptIndex++;
+        targetPane.getChildren().clear(); // Remove the target
+
+        // Proceed to next attempt
+        displayNextTarget();
     }
     public static void main(String[] args) {
         launch(args);
