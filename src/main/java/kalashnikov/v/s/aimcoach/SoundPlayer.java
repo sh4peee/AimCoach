@@ -55,7 +55,6 @@ public class SoundPlayer {
 
     //Установка громкости
     //x должен быть в пределах от 0 до 1
-
     public void setVolume(float x) {
         if (x<0) x = 0;
         if (x>1) x = 1;

@@ -15,6 +15,7 @@ import javafx.scene.layout.*;
 import javafx.stage.Stage;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Random;
 import javafx.scene.paint.Color;
 
@@ -35,6 +36,7 @@ public class AimCoachApp extends Application {
     private Label scoreLabel;
     private Label recordLabel;
     private Label timeLabel;
+    private Label accuracyLabel;
     private Stage primaryStage;
     private Scene menuScene;
     private Scene gameScene;
@@ -42,6 +44,10 @@ public class AimCoachApp extends Application {
     private ComboBox<String> backgroundComboBox;
     private int successfulHits = 0;
     private int missedHits = 0;
+    private static final Map<String, String> BACKGROUND_MAP = Map.of(
+            "Dust", "file:src/images/bg_1.jpg",
+            "Inferno", "file:src/images/bg_2.jpg"
+    );
 
     private long[] reactionTimes;
     private int attemptIndex;
@@ -57,28 +63,36 @@ public class AimCoachApp extends Application {
         this.primaryStage = primaryStage;
         this.primaryStage.setTitle("AimCoach App");
 
-        // Создаем сцену меню
-        menuScene = createMenuScene();
+        initializeMenuScene();
+        initializeGameScene();
+        initializeReactionTestScene();
 
         // Устанавливаем сцену меню в качестве сцены по умолчанию
         this.primaryStage.setScene(menuScene);
         this.primaryStage.show();
+        setupEscapeKeyHandler();
+    }
+    private void initializeMenuScene() {
+        menuScene = createMenuScene();
+    }
 
-        // Обработка нажатия на клавишу ESC для вызова и закрытия меню
-        this.primaryStage.addEventHandler(javafx.scene.input.KeyEvent.KEY_RELEASED, (key) -> {
-            if (key.getCode() == KeyCode.ESCAPE ) {
+    private void initializeGameScene() {
+        gameScene = createGameScene();
+    }
+
+    private void initializeReactionTestScene() {
+        reactionTestScene = createReactionTestScene();
+    }
+
+    private void setupEscapeKeyHandler() {
+        this.primaryStage.addEventHandler(javafx.scene.input.KeyEvent.KEY_RELEASED, key -> {
+            if (key.getCode() == KeyCode.ESCAPE) {
                 if (this.primaryStage.getScene() == gameScene || this.primaryStage.getScene() == reactionTestScene) {
                     this.primaryStage.setScene(menuScene);
-                    if (timer != null) timer.stop(); // Пауза таймера
+                    if (timer != null) timer.stop();
                 }
             }
         });
-
-        // Создаем сцену игры и присваиваем ее gameScene
-        gameScene = createGameScene();
-
-        // Создание сцены теста реакции
-        reactionTestScene = createReactionTestScene();
     }
     private Scene createMenuScene() {
         // Выпадающий список для выбора звука попадания
@@ -97,13 +111,10 @@ public class AimCoachApp extends Application {
             String selectedBackground = backgroundComboBox.getValue();
             updateBackground(selectedBackground);
         });
-        // Создаем метку для отображения над комбобоксом выбора карты
-        Label backgroundLabel = new Label("Карта:");
 
-        // Создаем метку для отображения над комбобоксом выбора звука выстрела
+        Label backgroundLabel = new Label("Карта:");
         Label soundLabel = new Label("Звук выстрела:");
 
-        // Создаем выпадающий список для выбора времени игры
         ComboBox<String> timeComboBox = new ComboBox<>();
         timeComboBox.getItems().addAll("20 sec", "40 sec", "60 sec");
         timeComboBox.setValue("20 sec"); // Устанавливаем значение по умолчанию
@@ -124,10 +135,10 @@ public class AimCoachApp extends Application {
             }
         });
 
-        // Создаем кнопку для входа в игру
+        // Кнопка для входа в игру
         Button startGameButton = new Button("Start Game");
         startGameButton.setOnAction(event -> {
-            // Заменяем сцену на сцену игры
+            // Замена сцены на сцену игры
             primaryStage.setScene(gameScene);
             resetScore();
             generateTargets();
@@ -144,10 +155,9 @@ public class AimCoachApp extends Application {
             resetGame(); // Переиспользование метода resetGame для перезапуска игры
         });
 
-        // Создаем кнопку для выхода из приложения
+        // Кнопку для выхода из приложения
         Button exitButton = new Button("Exit");
         exitButton.setOnAction(event -> {
-            // Закрываем приложение
             primaryStage.close();
         });
 
@@ -155,7 +165,7 @@ public class AimCoachApp extends Application {
 
         Button changeDifficultyButton = new Button("Change Difficulty");
         changeDifficultyButton.setOnAction(event -> {
-            // Изменяем сложность игры и обновляем метку
+            // Изменение сложности игры
             if (targetRadius== TARGET_RADIUS_EASY) {
                 targetRadius = TARGET_RADIUS_MEDIUM;
                 difficultyLabel.setText("Difficulty: Medium");
@@ -168,14 +178,14 @@ public class AimCoachApp extends Application {
             }
             generateTargets();
         });
-        // Создаем метку для отображения текущего счета
+        // Текущий счет
         scoreLabel = new Label();
         scoreLabel.setText("Score: " + score);
 
-        // Создаем метку для отображения наилучшего результата
+        // Отображение наилучшего результата
         recordLabel = new Label("Record: " + record);
 
-        // Создаем вертикальную панель для расположения элементов меню
+        // Вертикальная панель для элементов меню
         VBox menuLayout = new VBox(20);
         menuLayout.setAlignment(Pos.CENTER);
         menuLayout.getChildren().addAll(timeComboBox);
@@ -187,13 +197,13 @@ public class AimCoachApp extends Application {
         Image backgroundImage = new Image("file:src/images/menu_bg.jpg");
         BackgroundImage background = new BackgroundImage(backgroundImage, BackgroundRepeat.NO_REPEAT, BackgroundRepeat.NO_REPEAT, BackgroundPosition.CENTER, BackgroundSize.DEFAULT);
 
-        // Создаем главную панель
+        // Главная панель
         BorderPane menuPane = new BorderPane();
         menuPane.setBackground(new Background(background));
         menuPane.setCenter(menuLayout);
         menuPane.setTop(timeComboBox);
 
-        // Создаем сцену меню
+        // Сцена меню
         Scene menuScene = new Scene(menuPane, WIDTH, LENGTH);
         menuScene.getStylesheets().add("file:src/style.css");
 
@@ -217,10 +227,7 @@ public class AimCoachApp extends Application {
         targetTime = 20 * 1_000_000_000L;
         startTimer();
         primaryStage.setScene(gameScene);
-
     }
-
-    private Label accuracyLabel;
 
     private void updateAccuracyLabel() {
         if (successfulHits + missedHits > 0) {
@@ -228,27 +235,23 @@ public class AimCoachApp extends Application {
             accuracyLabel.setText(String.format("Accuracy: %.2f%%", accuracy));
         }
     }
+
     private void updateBackground(String backgroundName) {
-        String imagePath = switch (backgroundName) {
-            case "Dust" -> "file:src/images/bg_1.jpg";
-            case "Inferno" -> "file:src/images/bg_2.jpg";
-            default -> ""; // Путь к изображению
-        };
-        setGameBackground(((BorderPane)gameScene.getRoot()), imagePath);
+        String imagePath = BACKGROUND_MAP.getOrDefault(backgroundName, "");
+        setGameBackground((BorderPane) gameScene.getRoot(), imagePath);
     }
 
     private Scene createGameScene() {
         accuracyLabel = new Label("Accuracy: 0.00%");
         accuracyLabel.setTextFill(Color.GOLD);
 
-        // Создаем полотно для рисования
         Canvas gameCanvas = new Canvas(WIDTH, LENGTH);
         // Получаем графический контекст
         GraphicsContext gc = gameCanvas.getGraphicsContext2D();
-        // Создаем метку для отображения оставшегося времени
+        // Оставшееся времени
         timeLabel = new Label("Time Left: " + (targetTime / 1_000_000_000));
         timeLabel.setTextFill(Color.GOLD);
-        // Создаем вертикальную панель для расположения элементов игры
+        // Панель для элементов игры
         VBox gameLayout = new VBox(20);
         gameLayout.setAlignment(Pos.TOP_CENTER);
         gameLayout.getChildren().addAll(timeLabel, gameCanvas);
@@ -261,11 +264,10 @@ public class AimCoachApp extends Application {
         topPanel.getChildren().addAll(timeLabel, accuracyLabel);  // Добавление меток в панель
         gamePane.setTop(topPanel);
         gamePane.setCenter(gameCanvas);
-        // Создаем сцену игры
+        // Сцена игры
         Scene gameScene = new Scene(gamePane, WIDTH, LENGTH);
         gamePane.setBackground(new Background(new BackgroundImage(new Image("file:src/images/bg_1.jpg"),
                 BackgroundRepeat.NO_REPEAT, BackgroundRepeat.NO_REPEAT, BackgroundPosition.DEFAULT, BackgroundSize.DEFAULT)));
-
         // Обработка нажатия на полотно игры
         gameCanvas.addEventHandler(MouseEvent.MOUSE_CLICKED, event -> {
             boolean hit = false;
@@ -276,18 +278,15 @@ public class AimCoachApp extends Application {
                     score++;
                     scoreLabel.setText("Score: " + score);
                     target.pop();
-
                     String selectedSound = soundComboBox.getValue();
                     String soundPath = "src/Sounds/" + selectedSound;
                     // запускает звук с заданной громкостью( от 0 до 1)
-                    SoundPlayer.playSound(soundPath).setVolume((float) 0.4);
+                    SoundPlayer.playSound(soundPath).setVolume((float) 0.5);
                     double x = new Random().nextDouble() * (WIDTH - targetRadius * 2) + targetRadius;
                     double y = new Random().nextDouble() * (LENGTH - targetRadius * 2) + targetRadius;
                     targets.add(new Target(x, y, targetRadius));
-
                     // Перерисовываем цели на полотне
                     drawTargets(gc);
-
                     // Прерываем цикл, чтобы обработать клик только на одном шарике за раз
                     break;
                 }
@@ -328,8 +327,7 @@ public class AimCoachApp extends Application {
                     }
                     primaryStage.setScene(menuScene);
                 }
-
-                long secondsLeft = targetTime / 1_000_000_000; // Переводим наносекунды в секунды
+                long secondsLeft = targetTime / 1_000_000_000;
                 timeLabel.setText("Time Left: " + secondsLeft);
             }
         };
@@ -437,7 +435,7 @@ public class AimCoachApp extends Application {
         targetLabel.setPrefSize(1380, 355);
         targetLabel.setStyle("-fx-background-color: red; -fx-font-size: 36px; -fx-padding: 20px;");
         targetPane.getChildren().add(targetLabel);
-        targetPane.setUserData(System.nanoTime()); // Save the time when target is shown
+        targetPane.setUserData(System.nanoTime());
     }
 
     private void handleReactionClick(MouseEvent event) {
@@ -446,13 +444,12 @@ public class AimCoachApp extends Application {
         }
 
         long startTime = (long) targetPane.getUserData();
-        long reactionTime = (System.nanoTime() - startTime) / 1_000_000; // Convert to milliseconds
+        long reactionTime = (System.nanoTime() - startTime) / 1_000_000;
         reactionTimes[attemptIndex] = reactionTime;
         attemptLabels[attemptIndex].setText("Attempt " + (attemptIndex + 1) + ": " + reactionTime + " ms");
         attemptIndex++;
-        targetPane.getChildren().clear(); // Remove the target
+        targetPane.getChildren().clear();
 
-        // Proceed to next attempt
         displayNextTarget();
     }
     public static void main(String[] args) {

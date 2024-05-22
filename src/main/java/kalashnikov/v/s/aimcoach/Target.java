@@ -5,9 +5,9 @@ import javafx.scene.image.Image;
 
 class Target {
     private static final Image targetImage = new Image("file:src/images/target.png");
-    private final double x;
-    private final double y;
-    private final double radius;
+    private double x;
+    private double y;
+    private double radius;
     private boolean popped = false;
 
     public Target(double x, double y, double radius) {
@@ -15,12 +15,16 @@ class Target {
         this.y = y;
         this.radius = radius;
     }
+    public double getX() { return x; }
+    public void setX(double x) { this.x = x; }
 
-    public void pop() {
-        popped = true;
+    public double getY() { return y; }
+    public void setY(double y) { this.y = y; }
 
-    }
+    public double getRadius() { return radius; }
+    public void setRadius(double radius) { this.radius = radius; }
 
+    public void pop() { popped = true; }
     public boolean isPopped() {
         return popped;
     }
